@@ -40,6 +40,26 @@ const SEED_LEADS = [
     bestAngle: 'Position LegalEdge as the force multiplier that lets a solo practitioner handle 120+ matters without hiring. Lead with the document automation for HOA lien foreclosures and the AI-powered deadline tracking that eliminates malpractice risk.',
     suggestedSubject: 'How solo HOA attorneys in Miami-Dade are handling 100+ matters without burning out',
     competitorAlert: null,
+    sequenceTier: 1,
+    sequenceStatus: 'complete',
+    touchCount: 7,
+    touchHistory: [
+      { touchNumber: 1, day: 1, channel: 'email', action: 'Cold intro email', sentAt: '2026-03-10T10:30:00Z' },
+      { touchNumber: 2, day: 3, channel: 'linkedin', action: 'LinkedIn connection request', sentAt: '2026-03-12T09:00:00Z' },
+      { touchNumber: 3, day: 5, channel: 'email', action: 'Follow-up email', sentAt: '2026-03-14T09:00:00Z' },
+      { touchNumber: 4, day: 7, channel: 'call', action: 'Phone call', sentAt: '2026-03-16T14:00:00Z' },
+      { touchNumber: 5, day: 10, channel: 'email', action: 'Value add email', sentAt: '2026-03-19T09:00:00Z' },
+      { touchNumber: 6, day: 12, channel: 'linkedin', action: 'LinkedIn DM', sentAt: '2026-03-21T09:00:00Z' },
+      { touchNumber: 7, day: 14, channel: 'email', action: 'Breakup email', sentAt: '2026-03-23T09:00:00Z' },
+    ],
+    sequenceStartedAt: '2026-03-10T10:00:00Z',
+    sequenceCompletedAt: '2026-03-23T09:00:00Z',
+    stageHistory: [
+      { stage: 'new', changedAt: '2026-03-10T10:00:00Z', reason: 'import' },
+      { stage: 'contacted', changedAt: '2026-03-10T10:30:00Z', reason: 'Day 1 email sent' },
+      { stage: 'replied', changedAt: '2026-03-17T08:00:00Z', reason: 'Reply received' },
+      { stage: 'demo-booked', changedAt: '2026-03-18T12:00:00Z', reason: 'Manual' },
+    ],
     createdAt: '2026-03-10T10:00:00Z',
   },
   {
@@ -76,6 +96,18 @@ const SEED_LEADS = [
     bestAngle: 'Reference David\'s LinkedIn post about needing better tech. Position LegalEdge as the purpose-built solution for FL HOA foreclosure firms that outgrows Clio. Lead with the batch filing automation and Broward County e-filing integration.',
     suggestedSubject: 'Re: your LinkedIn post about legal tech — built exactly for Broward HOA firms',
     competitorAlert: 'Currently using Clio — will need migration path messaging and ROI comparison showing LegalEdge advantage for HOA-specific workflows.',
+    sequenceTier: 1,
+    sequenceStatus: 'active',
+    touchCount: 2,
+    touchHistory: [
+      { touchNumber: 1, day: 1, channel: 'email', action: 'Cold intro email', sentAt: '2026-03-08T15:00:00Z' },
+      { touchNumber: 2, day: 3, channel: 'linkedin', action: 'LinkedIn connection request', sentAt: '2026-03-10T09:00:00Z' },
+    ],
+    sequenceStartedAt: '2026-03-08T14:30:00Z',
+    stageHistory: [
+      { stage: 'new', changedAt: '2026-03-08T14:30:00Z', reason: 'import' },
+      { stage: 'contacted', changedAt: '2026-03-08T15:00:00Z', reason: 'Day 1 email sent' },
+    ],
     createdAt: '2026-03-08T14:30:00Z',
   },
   {
@@ -112,6 +144,14 @@ const SEED_LEADS = [
     bestAngle: 'Lead with the speed advantage — LegalEdge\'s AI generates eviction filings 10x faster than manual templates. Emphasize the automated 3-day notice system and hearing date tracking that eliminates the risk of missed deadlines. Position as the "enterprise-level tech" Monica experienced at her prior large firm, now available for her boutique practice.',
     suggestedSubject: 'Cutting eviction filing time by 90% for Miami-Dade landlord attorneys',
     competitorAlert: null,
+    sequenceTier: 1,
+    sequenceStatus: 'active',
+    touchCount: 0,
+    touchHistory: [],
+    sequenceStartedAt: '2026-03-15T09:00:00Z',
+    stageHistory: [
+      { stage: 'new', changedAt: '2026-03-15T09:00:00Z', reason: 'import' },
+    ],
     createdAt: '2026-03-15T09:00:00Z',
   },
   {
@@ -148,6 +188,20 @@ const SEED_LEADS = [
     bestAngle: 'Since James already replied, focus on the demo value proposition. Position LegalEdge as the tool that can help them systematize their HOA-related work and potentially grow that practice area. Lead with the litigation-specific features that PracticePanther lacks.',
     suggestedSubject: 'Quick demo: how Boca RE firms are streamlining real estate litigation',
     competitorAlert: 'Using PracticePanther — position LegalEdge as complementary specialist tool rather than replacement. Emphasize features PP lacks for RE litigation.',
+    sequenceTier: 2,
+    sequenceStatus: 'paused',
+    touchCount: 3,
+    touchHistory: [
+      { touchNumber: 1, day: 1, channel: 'email', action: 'Cold intro email', sentAt: '2026-03-12T12:00:00Z' },
+      { touchNumber: 2, day: 5, channel: 'email', action: 'Follow-up email', sentAt: '2026-03-16T09:00:00Z' },
+      { touchNumber: 3, day: 7, channel: 'call', action: 'Phone call', sentAt: '2026-03-18T14:00:00Z' },
+    ],
+    sequenceStartedAt: '2026-03-12T11:15:00Z',
+    stageHistory: [
+      { stage: 'new', changedAt: '2026-03-12T11:15:00Z', reason: 'import' },
+      { stage: 'contacted', changedAt: '2026-03-12T12:00:00Z', reason: 'Day 1 email sent' },
+      { stage: 'replied', changedAt: '2026-03-18T16:00:00Z', reason: 'Reply received' },
+    ],
     createdAt: '2026-03-12T11:15:00Z',
   },
   {
@@ -184,16 +238,47 @@ const SEED_LEADS = [
     bestAngle: 'Long-term nurture play. Position LegalEdge as the tool that could help them build out an HOA/eviction litigation practice area to serve their existing client base. Not an immediate fit but worth maintaining the relationship.',
     suggestedSubject: 'Adding HOA litigation to your Orlando RE practice — a growing opportunity',
     competitorAlert: 'Using Smokeball for transactions. LegalEdge serves a different need (litigation), so position as additive rather than replacement. Low urgency — nurture only.',
+    sequenceTier: 3,
+    sequenceStatus: 'active',
+    touchCount: 0,
+    touchHistory: [],
+    sequenceStartedAt: '2026-03-14T16:45:00Z',
+    stageHistory: [
+      { stage: 'new', changedAt: '2026-03-14T16:45:00Z', reason: 'import' },
+    ],
     createdAt: '2026-03-14T16:45:00Z',
   },
 ];
+
+// Migrate a lead to the new decoupled schema
+function migrateLead(lead) {
+  if (lead.touchHistory) return lead; // already migrated
+  const history = lead.sequenceHistory || [];
+  return {
+    ...lead,
+    sequenceTier: lead.sequenceTier || lead.tier || 3,
+    sequenceStatus: lead.sequenceStatus || (lead.stage === 'replied' || lead.stage === 'demo-booked' ? 'paused' : 'active'),
+    touchCount: lead.touchCount || history.length,
+    touchHistory: lead.touchHistory || history.map((h, i) => ({
+      touchNumber: i + 1,
+      day: h.day,
+      channel: h.channel,
+      action: h.action,
+      sentAt: h.completedAt || h.sentAt || new Date().toISOString(),
+      openedAt: null,
+      repliedAt: null,
+    })),
+    stageHistory: lead.stageHistory || [{ stage: lead.stage || 'new', changedAt: lead.createdAt, reason: 'migrated' }],
+    sequenceStartedAt: lead.sequenceStartedAt || lead.createdAt,
+  };
+}
 
 function loadLeads() {
   try {
     const stored = localStorage.getItem(STORAGE_KEY);
     if (stored) {
       const parsed = JSON.parse(stored);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed.map(migrateLead);
     }
   } catch (e) {
     console.error('Failed to load leads from localStorage:', e);
@@ -233,8 +318,13 @@ export function useLeads() {
       bestAngle: '',
       suggestedSubject: '',
       competitorAlert: null,
-      sequenceHistory: [],
+      sequenceTier: tier,
+      sequenceStatus: 'active',
+      touchCount: 0,
+      touchHistory: [],
+      sequenceHistory: [], // backward compat
       sequenceStartedAt: new Date().toISOString(),
+      stageHistory: [{ stage: 'new', changedAt: new Date().toISOString(), reason: 'import' }],
       createdAt: new Date().toISOString(),
     };
     setLeads(prev => [newLead, ...prev]);

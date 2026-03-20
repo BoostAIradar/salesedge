@@ -250,8 +250,9 @@ export default function MorningBriefing({ leads, updateLead, updateStage, posts,
                       <div>
                         <div style={styles.actionLabel}>{action.action}</div>
                         <div style={styles.actionReason}>
-                          Day {action.day}
+                          Touch {action.touchNumber || (action.touchCount + 1)} of {action.totalTouches || '?'} — Day {action.day}
                           {action.isOverdue && <span style={{ color: colors.red }}> — overdue</span>}
+                          {action.isDueToday && !action.isOverdue && <span style={{ color: colors.amber }}> — today</span>}
                         </div>
                       </div>
                     </div>

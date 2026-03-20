@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { colors, font, stageColors, stageLabels, tierColors } from '../styles/tokens';
 import Tag from '../components/Tag';
 import ImportModal from './ImportModal';
+import { getSequenceStatus } from '../engine/sequence';
 
 const STAGES = ['new', 'contacted', 'replied', 'demo-booked', 'closed', 'dead'];
 
@@ -79,6 +80,39 @@ export default function Pipeline({ leads, importLead, updateLead }) {
 function LeadCard({ lead, onClick }) {
   const tierColor = tierColors[lead.tier] || colors.textMuted;
   const isResearching = lead.researchStatus === 'researching';
+  const seqStatus = getSequenceStatus(lead);
+
+  // Touch progress info
+  let touchLabel = '';
+  let touchColor = colors.textMuted;
+  let touchDueLabel = '';
+  if (seqStatus) {
+    touchLabel = `Touch ${seqStatus.touchCount} of ${seqStatus.totalTouches}`;
+    if (seqStatus.sequenceStatus === 'paused') {
+      touchLabel = 'Sequence paused — reply received';
+      touchColor = colors.green;
+    } else if (seqStatus.sequenceStatus === 'complete' && lead.stage === 'dead') {
+      touchLabel = 'Sequence complete — no reply';
+      touchColor = colors.textMuted;
+    } else if (seqStatus.sequenceStatus === 'complete') {
+      touchLabel = `All ${seqStatus.totalTouches} touches complete`;
+      touchColor = colors.green;
+    } else if (seqStatus.nextTouch) {
+      const nt = seqStatus.nextTouch;
+      const channelLabel = nt.channel === 'email' ? 'Email' : nt.channel === 'linkedin' ? 'LinkedIn' : nt.channel === 'call' ? 'Call' : nt.channel;
+      if (nt.isDueToday) {
+        touchDueLabel = `${channelLabel} due TODAY`;
+        touchColor = colors.amber;
+      } else if (nt.isOverdue) {
+        touchDueLabel = `${channelLabel} OVERDUE`;
+        touchColor = colors.red;
+      } else {
+        const daysUntil = Math.ceil((new Date(nt.dueDate) - new Date()) / (1000 * 60 * 60 * 24));
+        touchDueLabel = `${channelLabel} in ${daysUntil}d`;
+        touchColor = colors.textMuted;
+      }
+    }
+  }
 
   return (
     <div style={styles.card} onClick={onClick}>
@@ -109,6 +143,24 @@ function LeadCard({ lead, onClick }) {
           <Tag label={`${lead.matterVolume} matters`} color={colors.blue} />
         )}
       </div>
+
+      {seqStatus && (
+        <div style={styles.touchRow}>
+          <div style={styles.touchDivider} />
+          <span style={{ ...styles.touchLabel, color: touchColor }}>{touchLabel}</span>
+          {touchDueLabel && (
+            <span style={{
+              ...styles.touchDue,
+              color: touchColor === colors.red || touchColor === colors.amber ? colors.bg0 : touchColor,
+              background: touchColor === colors.red || touchColor === colors.amber ? touchColor : 'transparent',
+              padding: touchColor === colors.red || touchColor === colors.amber ? '1px 6px' : 0,
+              borderRadius: 3,
+            }}>
+              {touchDueLabel}
+            </span>
+          )}
+        </div>
+      )}
 
       {isResearching && (
         <div style={styles.researchPulse}>
@@ -292,6 +344,25 @@ const styles = {
     display: 'flex',
     gap: 4,
     flexWrap: 'wrap',
+  },
+  touchRow: {
+    marginTop: 8,
+  },
+  touchDivider: {
+    height: 1,
+    background: colors.border,
+    marginBottom: 6,
+  },
+  touchLabel: {
+    fontSize: 10,
+    fontWeight: 500,
+    display: 'block',
+    marginBottom: 2,
+  },
+  touchDue: {
+    fontSize: 10,
+    fontWeight: 700,
+    display: 'inline-block',
   },
   researchPulse: {
     marginTop: 8,

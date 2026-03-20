@@ -5,7 +5,7 @@ import ScoreRing from '../components/ScoreRing';
 import Card from '../components/Card';
 import Tag from '../components/Tag';
 import { scoreICP } from '../engine/icp';
-import { getNextAction, getSequenceConfig, markActionComplete, SEQUENCE_TIERS } from '../engine/sequence';
+import { getSequenceStatus, getSequenceConfig, markActionComplete, SEQUENCE_TIERS } from '../engine/sequence';
 import { trackEmailSend } from '../engine/learning';
 
 const STAGES_ORDER = ['new', 'contacted', 'replied', 'demo-booked', 'closed', 'dead'];
@@ -30,18 +30,20 @@ export default function LeadProfile({ leads, updateStage, updateLead }) {
     );
   }
 
-  const currentIdx = STAGES_ORDER.indexOf(lead.stage);
-  const canGoBack = currentIdx > 0;
-  const canGoForward = currentIdx < STAGES_ORDER.length - 1;
-
   const breakdown = lead.breakdown || scoreICP(lead).breakdown;
 
-  function moveStage(direction) {
-    const newIdx = currentIdx + direction;
-    if (newIdx >= 0 && newIdx < STAGES_ORDER.length) {
-      updateStage(lead.id, STAGES_ORDER[newIdx]);
-      syncToGHL(lead, STAGES_ORDER[newIdx]);
-    }
+  // Pipeline manual stage controls — only specific transitions allowed
+  function handleBookDemo() {
+    updateStage(lead.id, 'demo-booked');
+    syncToGHL(lead, 'demo-booked');
+  }
+  function handleMarkClosed() {
+    updateStage(lead.id, 'closed');
+    syncToGHL(lead, 'closed');
+  }
+  function handleMarkDead() {
+    updateStage(lead.id, 'dead');
+    syncToGHL(lead, 'dead');
   }
 
   function syncToGHL(lead, newStage) {
@@ -52,10 +54,10 @@ export default function LeadProfile({ leads, updateStage, updateLead }) {
     }).catch(err => console.error('GHL sync failed:', err));
   }
 
-  const nextAction = getNextAction(lead);
-  const seqConfig = getSequenceConfig(lead.tier);
-  const tierConfig = SEQUENCE_TIERS[lead.tier] || SEQUENCE_TIERS[3];
-  const sequenceHistory = lead.sequenceHistory || [];
+  const seqStatus = getSequenceStatus(lead);
+  const seqConfig = getSequenceConfig(lead.sequenceTier || lead.tier);
+  const nextAction = seqStatus?.nextTouch || null;
+  const touchHistory = lead.touchHistory || lead.sequenceHistory || [];
 
   async function handleWriteEmail() {
     setEmailModal(true);
@@ -103,13 +105,14 @@ export default function LeadProfile({ leads, updateStage, updateLead }) {
         });
 
         if (nextAction) {
-          const historyUpdate = markActionComplete(lead, nextAction);
-          updateLead(lead.id, historyUpdate);
-        }
-
-        if (lead.stage === 'new') {
-          updateStage(lead.id, 'contacted');
-          syncToGHL(lead, 'contacted');
+          const updates = markActionComplete(lead, nextAction);
+          // Handle auto stage changes (only 3 sync points)
+          if (updates._autoStageChange) {
+            updateStage(lead.id, updates._autoStageChange);
+            syncToGHL(lead, updates._autoStageChange);
+            delete updates._autoStageChange;
+          }
+          updateLead(lead.id, updates);
         }
       }
     } catch (err) {
@@ -150,22 +153,26 @@ export default function LeadProfile({ leads, updateStage, updateLead }) {
         <div style={styles.topCenter}>
           <span style={{ ...styles.stageDot, background: stageColors[lead.stage] }} />
           <span style={styles.stageLabel}>{stageLabels[lead.stage]}</span>
+          {seqStatus && (
+            <span style={styles.touchBadge}>Touch {seqStatus.touchCount}/{seqStatus.totalTouches}</span>
+          )}
         </div>
         <div style={styles.topActions}>
-          <button
-            style={{ ...styles.stageBtn, opacity: canGoBack ? 1 : 0.3 }}
-            disabled={!canGoBack}
-            onClick={() => moveStage(-1)}
-          >
-            ← Back
-          </button>
-          <button
-            style={{ ...styles.stageBtn, background: colors.amber, color: colors.bg0, opacity: canGoForward ? 1 : 0.3 }}
-            disabled={!canGoForward}
-            onClick={() => moveStage(1)}
-          >
-            Forward →
-          </button>
+          {lead.stage === 'replied' && (
+            <button style={{ ...styles.stageBtn, background: colors.amber, color: colors.bg0 }} onClick={handleBookDemo}>
+              Book Demo
+            </button>
+          )}
+          {lead.stage === 'demo-booked' && (
+            <button style={{ ...styles.stageBtn, background: colors.green, color: colors.bg0 }} onClick={handleMarkClosed}>
+              Mark Closed
+            </button>
+          )}
+          {lead.stage !== 'dead' && lead.stage !== 'closed' && (
+            <button style={{ ...styles.stageBtn, color: colors.textMuted }} onClick={handleMarkDead}>
+              Mark Dead
+            </button>
+          )}
         </div>
       </div>
 
@@ -267,57 +274,130 @@ export default function LeadProfile({ leads, updateStage, updateLead }) {
             </Card>
           )}
 
-          {/* SEQUENCE PANEL — Phase 2 */}
+          {/* PIPELINE POSITION — relationship status */}
           <Card style={{ marginTop: 12 }}>
-            <div style={styles.sectionHeader}>
-              <div style={styles.sectionTitle}>Sequence</div>
-              <Tag label={`${seqConfig.label} · T${lead.tier}`} color={tierColors[lead.tier]} />
+            <div style={styles.sectionTitle}>Pipeline Position</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+              <span style={{ ...styles.stageDot, background: stageColors[lead.stage] }} />
+              <span style={{ fontSize: 14, fontWeight: 600, color: colors.textPrimary }}>
+                {stageLabels[lead.stage]}
+              </span>
             </div>
-
-            {nextAction ? (
-              <div style={styles.nextActionCard}>
-                <div style={styles.nextActionTop}>
-                  <span style={styles.channelIcon}>{channelIcon[nextAction.channel] || '◇'}</span>
-                  <div>
-                    <div style={styles.nextActionLabel}>
-                      Day {nextAction.day}: {nextAction.action}
-                    </div>
-                    <div style={styles.nextActionDue}>
-                      Due: {new Date(nextAction.dueDate).toLocaleDateString()}
-                      {nextAction.isOverdue && <span style={{ color: colors.red, marginLeft: 6 }}>(overdue)</span>}
-                    </div>
-                  </div>
-                </div>
-                {(nextAction.channel === 'email' || nextAction.channel === 'linkedin') && (
-                  <button style={styles.writeBtn} onClick={handleWriteEmail}>
-                    Write Email Now
-                  </button>
-                )}
-              </div>
-            ) : (
-              <p style={styles.seqComplete}>Sequence complete</p>
-            )}
-
-            {sequenceHistory.length > 0 && (
-              <div style={styles.seqHistory}>
-                <div style={{ ...styles.sectionTitle, marginTop: 12 }}>History</div>
-                {sequenceHistory.map((h, i) => (
-                  <div key={i} style={styles.seqHistoryRow}>
-                    <span style={styles.seqHistoryIcon}>{channelIcon[h.channel] || '◇'}</span>
-                    <div style={styles.seqHistoryInfo}>
-                      <span style={styles.seqHistoryAction}>Day {h.day}: {h.action}</span>
-                      <span style={styles.seqHistoryDate}>
-                        {new Date(h.completedAt).toLocaleDateString()}
-                      </span>
-                    </div>
-                    {h.subject && (
-                      <span style={styles.seqHistorySubject}>{h.subject}</span>
-                    )}
-                  </div>
-                ))}
-              </div>
-            )}
+            <div style={{ fontSize: 11, color: colors.textSecondary, lineHeight: 1.5 }}>
+              Pipeline stage reflects relationship status. Changes only on: first email sent, reply received, or manual action.
+            </div>
           </Card>
+
+          {/* SEQUENCE STATUS — touch cadence (independent) */}
+          {seqStatus && (
+            <Card style={{ marginTop: 12 }}>
+              <div style={styles.sectionHeader}>
+                <div style={styles.sectionTitle}>Sequence (Touch Cadence)</div>
+                <Tag label={`${seqConfig.label} · T${lead.sequenceTier || lead.tier}`} color={tierColors[lead.sequenceTier || lead.tier]} />
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 10 }}>
+                <div style={{ flex: 1, height: 6, background: colors.bg1, borderRadius: 3, overflow: 'hidden' }}>
+                  <div style={{
+                    height: '100%',
+                    width: `${(seqStatus.touchCount / seqStatus.totalTouches) * 100}%`,
+                    background: seqStatus.sequenceStatus === 'paused' ? colors.blue : seqStatus.sequenceStatus === 'complete' ? colors.green : colors.amber,
+                    borderRadius: 3,
+                    transition: 'width 0.5s ease-out',
+                  }} />
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 600, color: colors.textPrimary }}>
+                  {seqStatus.touchCount} / {seqStatus.totalTouches}
+                </span>
+              </div>
+
+              {/* Status */}
+              {seqStatus.sequenceStatus === 'paused' && (
+                <div style={{ ...styles.nextActionCard, borderColor: `${colors.blue}40` }}>
+                  <div style={{ fontSize: 12, color: colors.blue, fontWeight: 600 }}>
+                    Sequence paused — reply received
+                  </div>
+                  <div style={{ fontSize: 11, color: colors.textSecondary, marginTop: 4 }}>
+                    Sequence will not fire more touches while lead has replied. Resume manually if needed.
+                  </div>
+                  <button
+                    style={{ ...styles.writeBtn, background: colors.blue, marginTop: 8 }}
+                    onClick={() => {
+                      updateLead(lead.id, { sequenceStatus: 'active' });
+                      updateStage(lead.id, 'contacted');
+                    }}
+                  >
+                    Resume Sequence
+                  </button>
+                </div>
+              )}
+
+              {seqStatus.sequenceStatus === 'complete' && (
+                <div style={{ fontSize: 12, color: colors.green, fontWeight: 600 }}>
+                  All {seqStatus.totalTouches} touches complete
+                </div>
+              )}
+
+              {/* Next touch card */}
+              {seqStatus.sequenceStatus === 'active' && nextAction && (
+                <div style={styles.nextActionCard}>
+                  <div style={styles.nextActionTop}>
+                    <span style={styles.channelIcon}>{channelIcon[nextAction.channel] || '◇'}</span>
+                    <div>
+                      <div style={styles.nextActionLabel}>
+                        Touch {nextAction.touchNumber}: {nextAction.action}
+                      </div>
+                      <div style={styles.nextActionDue}>
+                        Due: {new Date(nextAction.dueDate).toLocaleDateString()}
+                        {nextAction.isOverdue && <span style={{ color: colors.red, marginLeft: 6 }}>(overdue)</span>}
+                        {nextAction.isDueToday && <span style={{ color: colors.amber, marginLeft: 6 }}>(today)</span>}
+                      </div>
+                    </div>
+                  </div>
+                  {(nextAction.channel === 'email' || nextAction.channel === 'linkedin') && (
+                    <button style={styles.writeBtn} onClick={handleWriteEmail}>
+                      {nextAction.channel === 'email' ? 'Write Email Now' : 'Draft LinkedIn Message'}
+                    </button>
+                  )}
+                  {nextAction.channel === 'call' && (
+                    <button style={{ ...styles.writeBtn, background: colors.green }}>
+                      Open Call Script
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {seqStatus.sequenceStatus === 'active' && (
+                <button
+                  style={{ ...styles.writeBtn, background: colors.bg4, color: colors.textSecondary, border: `1px solid ${colors.border}`, marginTop: 8 }}
+                  onClick={() => updateLead(lead.id, { sequenceStatus: 'paused', sequencePausedAt: new Date().toISOString() })}
+                >
+                  Pause Sequence
+                </button>
+              )}
+
+              {/* Touch history */}
+              {touchHistory.length > 0 && (
+                <div style={styles.seqHistory}>
+                  <div style={{ ...styles.sectionTitle, marginTop: 12 }}>Touch History</div>
+                  {touchHistory.map((h, i) => (
+                    <div key={i} style={styles.seqHistoryRow}>
+                      <span style={styles.seqHistoryIcon}>{channelIcon[h.channel] || '◇'}</span>
+                      <div style={styles.seqHistoryInfo}>
+                        <span style={styles.seqHistoryAction}>
+                          Touch {h.touchNumber || i + 1} · Day {h.day}: {h.action}
+                        </span>
+                        <span style={styles.seqHistoryDate}>
+                          {new Date(h.sentAt || h.completedAt).toLocaleDateString()}
+                        </span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </Card>
+          )}
         </div>
       </div>
 
@@ -454,6 +534,14 @@ const styles = {
     fontSize: 14,
     fontWeight: 600,
     color: colors.textPrimary,
+  },
+  touchBadge: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    background: colors.bg4,
+    padding: '2px 8px',
+    borderRadius: 8,
+    marginLeft: 4,
   },
   topActions: {
     display: 'flex',
