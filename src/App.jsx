@@ -3,6 +3,7 @@ import { colors } from './styles/tokens';
 import Sidebar from './components/Sidebar';
 import Pipeline from './views/Pipeline';
 import LeadProfile from './views/LeadProfile';
+import EmailPerformance from './views/EmailPerformance';
 import MorningBriefing from './views/MorningBriefing';
 import ContentCalendar from './views/ContentCalendar';
 import UnifiedInbox from './views/UnifiedInbox';
@@ -34,10 +35,21 @@ export default function App() {
                 <LeadProfile
                   leads={leads}
                   updateStage={updateStage}
+                  updateLead={updateLead}
                 />
               }
             />
-            <Route path="/morning" element={<MorningBriefing />} />
+            <Route path="/email-performance" element={<EmailPerformance />} />
+            <Route
+              path="/morning"
+              element={
+                <MorningBriefing
+                  leads={leads}
+                  updateLead={updateLead}
+                  updateStage={updateStage}
+                />
+              }
+            />
             <Route path="/content" element={<ContentCalendar />} />
             <Route path="/inbox" element={<UnifiedInbox />} />
             <Route path="/reports" element={<WeeklyReport />} />

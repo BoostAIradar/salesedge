@@ -2,6 +2,8 @@ import { useState, useMemo } from 'react';
 import { colors, font, tierColors } from '../styles/tokens';
 import { scoreICP, calcTier } from '../engine/icp';
 import { runResearch } from '../engine/research';
+import { fireEmailSequence } from '../engine/sequence';
+import { trackEmailSend } from '../engine/learning';
 
 const COUNTIES = [
   { value: 'Miami-Dade', signal: true },
@@ -77,10 +79,24 @@ export default function ImportModal({ onClose, onImport, updateLead }) {
 
     try {
       const research = await runResearch(newLead);
+      const updatedLead = { ...newLead, ...research, researchStatus: 'complete' };
       updateLead(newLead.id, {
         ...research,
         researchStatus: 'complete',
       });
+
+      // Fire email sequence for T1/T2 leads after research completes
+      if (updatedLead.tier === 1 || updatedLead.tier === 2) {
+        const emailResult = await fireEmailSequence(updatedLead);
+        if (emailResult) {
+          trackEmailSend({
+            leadId: newLead.id,
+            subject: emailResult.subject,
+            angle: emailResult.angle,
+            day: 1,
+          });
+        }
+      }
     } catch {
       updateLead(newLead.id, { researchStatus: 'failed' });
     }

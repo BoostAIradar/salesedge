@@ -1,5 +1,7 @@
 import { useState, useCallback, useEffect } from 'react';
 import { scoreICP, calcTier } from '../engine/icp';
+import { fireEmailSequence } from '../engine/sequence';
+import { trackEmailSend } from '../engine/learning';
 
 const STORAGE_KEY = 'salesedge:leads';
 
@@ -231,9 +233,19 @@ export function useLeads() {
       bestAngle: '',
       suggestedSubject: '',
       competitorAlert: null,
+      sequenceHistory: [],
+      sequenceStartedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
     };
     setLeads(prev => [newLead, ...prev]);
+
+    // GHL sync on import
+    fetch('/api/ghl-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead: newLead, action: 'import' }),
+    }).catch(err => console.error('GHL sync on import failed:', err));
+
     return newLead;
   }, []);
 

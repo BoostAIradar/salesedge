@@ -1,8 +1,10 @@
 import { NavLink } from 'react-router-dom';
 import { colors, font } from '../styles/tokens';
+import { getTotalSends } from '../engine/learning';
 
 const NAV_ITEMS = [
   { path: '/', label: 'Pipeline', icon: '◈' },
+  { path: '/email-performance', label: 'Email Performance', icon: '◎', showBadge: true },
   { path: '/morning', label: 'Morning Briefing', icon: '☀' },
   { path: '/content', label: 'Content Calendar', icon: '▦' },
   { path: '/inbox', label: 'Unified Inbox', icon: '✉' },
@@ -10,6 +12,8 @@ const NAV_ITEMS = [
 ];
 
 export default function Sidebar() {
+  const totalSends = getTotalSends();
+
   return (
     <nav style={styles.sidebar}>
       <div style={styles.logo}>
@@ -32,12 +36,15 @@ export default function Sidebar() {
           >
             <span style={styles.icon}>{item.icon}</span>
             {item.label}
+            {item.showBadge && totalSends > 0 && (
+              <span style={styles.badge}>{totalSends}</span>
+            )}
           </NavLink>
         ))}
       </div>
       <div style={styles.footer}>
-        <div style={styles.footerLine}>Phase 1 — Active</div>
-        <div style={{ ...styles.footerLine, color: colors.textMuted }}>v0.1.0</div>
+        <div style={styles.footerLine}>Phase 2 — Active</div>
+        <div style={{ ...styles.footerLine, color: colors.textMuted }}>v0.2.0</div>
       </div>
     </nav>
   );
@@ -98,6 +105,17 @@ const styles = {
   icon: {
     fontSize: 14,
     width: 20,
+    textAlign: 'center',
+  },
+  badge: {
+    marginLeft: 'auto',
+    background: colors.amber,
+    color: colors.bg0,
+    fontSize: 10,
+    fontWeight: 700,
+    padding: '1px 6px',
+    borderRadius: 8,
+    minWidth: 18,
     textAlign: 'center',
   },
   footer: {

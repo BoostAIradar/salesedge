@@ -1,16 +1,23 @@
+import { useState } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { colors, font, stageColors, stageLabels, tierColors } from '../styles/tokens';
 import ScoreRing from '../components/ScoreRing';
 import Card from '../components/Card';
 import Tag from '../components/Tag';
 import { scoreICP } from '../engine/icp';
+import { getNextAction, getSequenceConfig, markActionComplete, SEQUENCE_TIERS } from '../engine/sequence';
+import { trackEmailSend } from '../engine/learning';
 
 const STAGES_ORDER = ['new', 'contacted', 'replied', 'demo-booked', 'closed', 'dead'];
 
-export default function LeadProfile({ leads, updateStage }) {
+export default function LeadProfile({ leads, updateStage, updateLead }) {
   const { id } = useParams();
   const navigate = useNavigate();
   const lead = leads.find(l => l.id === id);
+
+  const [emailModal, setEmailModal] = useState(false);
+  const [emailDraft, setEmailDraft] = useState(null);
+  const [emailLoading, setEmailLoading] = useState(false);
 
   if (!lead) {
     return (
@@ -33,8 +40,97 @@ export default function LeadProfile({ leads, updateStage }) {
     const newIdx = currentIdx + direction;
     if (newIdx >= 0 && newIdx < STAGES_ORDER.length) {
       updateStage(lead.id, STAGES_ORDER[newIdx]);
+      syncToGHL(lead, STAGES_ORDER[newIdx]);
     }
   }
+
+  function syncToGHL(lead, newStage) {
+    fetch('/api/ghl-sync', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ lead: { ...lead, stage: newStage || lead.stage }, action: 'stage-change' }),
+    }).catch(err => console.error('GHL sync failed:', err));
+  }
+
+  const nextAction = getNextAction(lead);
+  const seqConfig = getSequenceConfig(lead.tier);
+  const tierConfig = SEQUENCE_TIERS[lead.tier] || SEQUENCE_TIERS[3];
+  const sequenceHistory = lead.sequenceHistory || [];
+
+  async function handleWriteEmail() {
+    setEmailModal(true);
+    setEmailLoading(true);
+    try {
+      const res = await fetch('/api/email-write', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          lead,
+          sequenceDay: nextAction?.day || 1,
+        }),
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setEmailDraft(data);
+      }
+    } catch (err) {
+      console.error('Email write failed:', err);
+    }
+    setEmailLoading(false);
+  }
+
+  async function handleSendEmail() {
+    if (!emailDraft) return;
+    setEmailLoading(true);
+    try {
+      const sendRes = await fetch('/api/email-send', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          to: lead.email,
+          subject: emailDraft.subject,
+          body: emailDraft.body,
+          leadId: lead.id,
+        }),
+      });
+
+      if (sendRes.ok) {
+        trackEmailSend({
+          leadId: lead.id,
+          subject: emailDraft.subject,
+          angle: emailDraft.angle,
+          day: nextAction?.day || 1,
+        });
+
+        if (nextAction) {
+          const historyUpdate = markActionComplete(lead, nextAction);
+          updateLead(lead.id, historyUpdate);
+        }
+
+        if (lead.stage === 'new') {
+          updateStage(lead.id, 'contacted');
+          syncToGHL(lead, 'contacted');
+        }
+      }
+    } catch (err) {
+      console.error('Email send failed:', err);
+    }
+    setEmailModal(false);
+    setEmailDraft(null);
+    setEmailLoading(false);
+  }
+
+  function handleSaveDraft() {
+    setEmailModal(false);
+    setEmailDraft(null);
+  }
+
+  const channelIcon = {
+    email: '✉',
+    linkedin: '◈',
+    call: '☏',
+    nurture: '◇',
+  };
 
   const researchStatusColor = {
     researching: colors.amber,
@@ -170,8 +266,118 @@ export default function LeadProfile({ leads, updateStage }) {
               <p style={styles.alertText}>{lead.competitorAlert}</p>
             </Card>
           )}
+
+          {/* SEQUENCE PANEL — Phase 2 */}
+          <Card style={{ marginTop: 12 }}>
+            <div style={styles.sectionHeader}>
+              <div style={styles.sectionTitle}>Sequence</div>
+              <Tag label={`${seqConfig.label} · T${lead.tier}`} color={tierColors[lead.tier]} />
+            </div>
+
+            {nextAction ? (
+              <div style={styles.nextActionCard}>
+                <div style={styles.nextActionTop}>
+                  <span style={styles.channelIcon}>{channelIcon[nextAction.channel] || '◇'}</span>
+                  <div>
+                    <div style={styles.nextActionLabel}>
+                      Day {nextAction.day}: {nextAction.action}
+                    </div>
+                    <div style={styles.nextActionDue}>
+                      Due: {new Date(nextAction.dueDate).toLocaleDateString()}
+                      {nextAction.isOverdue && <span style={{ color: colors.red, marginLeft: 6 }}>(overdue)</span>}
+                    </div>
+                  </div>
+                </div>
+                {(nextAction.channel === 'email' || nextAction.channel === 'linkedin') && (
+                  <button style={styles.writeBtn} onClick={handleWriteEmail}>
+                    Write Email Now
+                  </button>
+                )}
+              </div>
+            ) : (
+              <p style={styles.seqComplete}>Sequence complete</p>
+            )}
+
+            {sequenceHistory.length > 0 && (
+              <div style={styles.seqHistory}>
+                <div style={{ ...styles.sectionTitle, marginTop: 12 }}>History</div>
+                {sequenceHistory.map((h, i) => (
+                  <div key={i} style={styles.seqHistoryRow}>
+                    <span style={styles.seqHistoryIcon}>{channelIcon[h.channel] || '◇'}</span>
+                    <div style={styles.seqHistoryInfo}>
+                      <span style={styles.seqHistoryAction}>Day {h.day}: {h.action}</span>
+                      <span style={styles.seqHistoryDate}>
+                        {new Date(h.completedAt).toLocaleDateString()}
+                      </span>
+                    </div>
+                    {h.subject && (
+                      <span style={styles.seqHistorySubject}>{h.subject}</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            )}
+          </Card>
         </div>
       </div>
+
+      {emailModal && (
+        <div style={styles.overlay} onClick={() => { setEmailModal(false); setEmailDraft(null); }}>
+          <div style={styles.modal} onClick={e => e.stopPropagation()}>
+            <div style={styles.modalHeader}>
+              <h3 style={styles.modalTitle}>
+                Email — {lead.firmName} · Day {nextAction?.day || 1}
+              </h3>
+              <button style={styles.closeBtn} onClick={() => { setEmailModal(false); setEmailDraft(null); }}>
+                ✕
+              </button>
+            </div>
+            <div style={styles.modalBody}>
+              {emailLoading ? (
+                <div style={styles.loadingText}>Generating email...</div>
+              ) : emailDraft ? (
+                <>
+                  <label style={styles.fieldLabel}>Subject</label>
+                  <input
+                    style={styles.input}
+                    value={emailDraft.subject}
+                    onChange={e => setEmailDraft({ ...emailDraft, subject: e.target.value })}
+                  />
+                  <label style={{ ...styles.fieldLabel, marginTop: 12 }}>Body</label>
+                  <textarea
+                    style={styles.textarea}
+                    value={emailDraft.body}
+                    onChange={e => setEmailDraft({ ...emailDraft, body: e.target.value })}
+                    rows={14}
+                  />
+                  {emailDraft.painPointUsed && (
+                    <div style={{ marginTop: 10 }}>
+                      <Tag label={`Pain: ${emailDraft.painPointUsed}`} color={colors.red} />
+                    </div>
+                  )}
+                  {emailDraft.angle && (
+                    <div style={{ marginTop: 6 }}>
+                      <Tag label={`Angle: ${emailDraft.angle}`} color={colors.amber} />
+                    </div>
+                  )}
+                </>
+              ) : (
+                <div style={styles.loadingText}>Failed to generate email.</div>
+              )}
+            </div>
+            <div style={styles.modalFooter}>
+              <button style={styles.cancelBtn} onClick={handleSaveDraft}>
+                Save Draft
+              </button>
+              {emailDraft && (
+                <button style={styles.sendBtn} onClick={handleSendEmail} disabled={emailLoading}>
+                  Send Now
+                </button>
+              )}
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -387,5 +593,200 @@ const styles = {
     color: colors.textPrimary,
     fontWeight: 500,
     textAlign: 'right',
+  },
+  // Sequence panel styles
+  nextActionCard: {
+    background: colors.bg4,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 6,
+    padding: 12,
+  },
+  nextActionTop: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 10,
+    marginBottom: 8,
+  },
+  channelIcon: {
+    fontSize: 18,
+    color: colors.amber,
+    width: 28,
+    textAlign: 'center',
+  },
+  nextActionLabel: {
+    fontSize: 13,
+    fontWeight: 600,
+    color: colors.textPrimary,
+  },
+  nextActionDue: {
+    fontSize: 11,
+    color: colors.textSecondary,
+    marginTop: 2,
+  },
+  writeBtn: {
+    background: colors.amber,
+    color: colors.bg0,
+    border: 'none',
+    borderRadius: 4,
+    padding: '6px 14px',
+    fontSize: 12,
+    fontWeight: 600,
+    fontFamily: font,
+    cursor: 'pointer',
+    width: '100%',
+    marginTop: 4,
+  },
+  seqComplete: {
+    fontSize: 12,
+    color: colors.green,
+    margin: 0,
+  },
+  seqHistory: {
+    marginTop: 4,
+  },
+  seqHistoryRow: {
+    display: 'flex',
+    alignItems: 'center',
+    gap: 8,
+    padding: '6px 0',
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  seqHistoryIcon: {
+    fontSize: 12,
+    color: colors.textMuted,
+    width: 20,
+    textAlign: 'center',
+    flexShrink: 0,
+  },
+  seqHistoryInfo: {
+    flex: 1,
+    display: 'flex',
+    justifyContent: 'space-between',
+  },
+  seqHistoryAction: {
+    fontSize: 11,
+    color: colors.textPrimary,
+  },
+  seqHistoryDate: {
+    fontSize: 10,
+    color: colors.textMuted,
+  },
+  seqHistorySubject: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    maxWidth: 120,
+    overflow: 'hidden',
+    textOverflow: 'ellipsis',
+    whiteSpace: 'nowrap',
+  },
+  // Email modal styles
+  overlay: {
+    position: 'fixed',
+    inset: 0,
+    background: 'rgba(0,0,0,0.7)',
+    display: 'flex',
+    alignItems: 'center',
+    justifyContent: 'center',
+    zIndex: 1000,
+  },
+  modal: {
+    background: colors.bg2,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 12,
+    width: 620,
+    maxHeight: '85vh',
+    overflow: 'auto',
+    fontFamily: font,
+  },
+  modalHeader: {
+    display: 'flex',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    padding: '16px 20px',
+    borderBottom: `1px solid ${colors.border}`,
+  },
+  modalTitle: {
+    fontSize: 14,
+    fontWeight: 700,
+    color: colors.textPrimary,
+    margin: 0,
+    fontFamily: font,
+  },
+  closeBtn: {
+    background: 'none',
+    border: 'none',
+    color: colors.textSecondary,
+    fontSize: 16,
+    cursor: 'pointer',
+    fontFamily: font,
+  },
+  modalBody: {
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 13,
+    color: colors.amber,
+    textAlign: 'center',
+    padding: 20,
+  },
+  fieldLabel: {
+    display: 'block',
+    fontSize: 11,
+    color: colors.textSecondary,
+    textTransform: 'uppercase',
+    letterSpacing: '0.05em',
+    marginBottom: 4,
+  },
+  input: {
+    width: '100%',
+    background: colors.bg4,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 4,
+    padding: '8px 10px',
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontFamily: font,
+    outline: 'none',
+  },
+  textarea: {
+    width: '100%',
+    background: colors.bg4,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 4,
+    padding: '8px 10px',
+    fontSize: 13,
+    color: colors.textPrimary,
+    fontFamily: font,
+    outline: 'none',
+    resize: 'vertical',
+    lineHeight: 1.5,
+  },
+  modalFooter: {
+    display: 'flex',
+    justifyContent: 'flex-end',
+    gap: 8,
+    padding: '12px 20px',
+    borderTop: `1px solid ${colors.border}`,
+  },
+  cancelBtn: {
+    background: colors.bg4,
+    border: `1px solid ${colors.border}`,
+    borderRadius: 6,
+    padding: '8px 16px',
+    fontSize: 13,
+    color: colors.textSecondary,
+    fontFamily: font,
+    cursor: 'pointer',
+  },
+  sendBtn: {
+    background: colors.amber,
+    border: 'none',
+    borderRadius: 6,
+    padding: '8px 16px',
+    fontSize: 13,
+    fontWeight: 600,
+    color: colors.bg0,
+    fontFamily: font,
+    cursor: 'pointer',
   },
 };
