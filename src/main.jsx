@@ -39,6 +39,11 @@ globalStyles.textContent = `
     0%, 100% { opacity: 1; }
     50% { opacity: 0.4; }
   }
+
+  @keyframes slideIn {
+    from { transform: translateX(100%); opacity: 0; }
+    to { transform: translateX(0); opacity: 1; }
+  }
 `;
 document.head.appendChild(globalStyles);
 

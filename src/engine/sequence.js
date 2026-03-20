@@ -107,6 +107,92 @@ export function markActionComplete(lead, action) {
   };
 }
 
+export function getSequenceHealth(leads) {
+  const now = new Date();
+  const weekAgo = new Date(now);
+  weekAgo.setDate(weekAgo.getDate() - 7);
+
+  let active = 0;
+  let stalled = 0;
+  let completedThisWeek = 0;
+  const dropOffs = {};
+
+  for (const lead of leads) {
+    if (lead.stage === 'closed' || lead.stage === 'dead') continue;
+
+    const history = lead.sequenceHistory || [];
+    const next = getNextAction(lead);
+
+    if (next) {
+      active++;
+      if (next.isOverdue) {
+        const overdueDays = Math.floor((now - new Date(next.dueDate)) / (1000 * 60 * 60 * 24));
+        if (overdueDays >= 7) stalled++;
+      }
+    } else if (history.length > 0) {
+      const lastAction = history[history.length - 1];
+      if (new Date(lastAction.completedAt) > weekAgo) {
+        completedThisWeek++;
+      }
+    }
+
+    // Track drop-off day
+    if (history.length > 0 && !next) {
+      const lastDay = history[history.length - 1].day;
+      dropOffs[lastDay] = (dropOffs[lastDay] || 0) + 1;
+    }
+  }
+
+  const topDropOff = Object.entries(dropOffs).sort((a, b) => b[1] - a[1]);
+  const totalWithHistory = leads.filter(l => (l.sequenceHistory || []).length > 0).length;
+
+  return {
+    activeSequences: active,
+    stalledSequences: stalled,
+    completedThisWeek,
+    avgCompletionRate: totalWithHistory > 0
+      ? completedThisWeek / totalWithHistory
+      : 0,
+    topDropOffDay: topDropOff.length > 0 ? parseInt(topDropOff[0][0]) : 0,
+    recommendations: [],
+  };
+}
+
+export function autoAdjustTiming(leads) {
+  const recommendations = [];
+  const seqKey = 'salesedge:seqRecommendations';
+
+  // Analyze all completed sequences for timing patterns
+  const dayReplies = {};
+  for (const lead of leads) {
+    const history = lead.sequenceHistory || [];
+    for (const h of history) {
+      if (!dayReplies[h.day]) dayReplies[h.day] = { total: 0, replied: 0 };
+      dayReplies[h.day].total++;
+      if (lead.stage === 'replied' || lead.stage === 'demo-booked') {
+        dayReplies[h.day].replied++;
+      }
+    }
+  }
+
+  // Check if follow-up days outperform early days
+  const day1 = dayReplies[1] || { total: 0, replied: 0 };
+  const day5 = dayReplies[5] || { total: 0, replied: 0 };
+  if (day1.total >= 5 && day5.total >= 5) {
+    const d1Rate = day1.replied / day1.total;
+    const d5Rate = day5.replied / day5.total;
+    if (d5Rate > d1Rate * 1.2) {
+      recommendations.push(`Day 5 reply rate (${(d5Rate * 100).toFixed(0)}%) exceeds Day 1 (${(d1Rate * 100).toFixed(0)}%). Consider stronger Day 1 hooks.`);
+    }
+  }
+
+  try {
+    localStorage.setItem(seqKey, JSON.stringify({ recommendations, updatedAt: new Date().toISOString() }));
+  } catch {}
+
+  return recommendations;
+}
+
 export async function fireEmailSequence(lead) {
   if (lead.tier !== 1 && lead.tier !== 2) return null;
 

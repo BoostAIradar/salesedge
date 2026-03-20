@@ -312,6 +312,154 @@ export function autoImproveSequence() {
   return { recommendations };
 }
 
+const IMPROVEMENT_KEY = 'salesedge:lastImprovement';
+const SEND_COUNTER_KEY = 'salesedge:sendCounter';
+
+export async function runWeeklyImprovement() {
+  // Check if already run this week
+  try {
+    const last = localStorage.getItem(IMPROVEMENT_KEY);
+    if (last) {
+      const lastDate = new Date(last);
+      const now = new Date();
+      const daysSince = Math.floor((now - lastDate) / (1000 * 60 * 60 * 24));
+      if (daysSince < 6) return null; // Already ran this week
+    }
+  } catch {}
+
+  // Only run on Monday after 9am
+  const now = new Date();
+  if (now.getDay() !== 1 || now.getHours() < 9) return null;
+
+  try {
+    const emailStats = getAllTemplateStats();
+    const totalSends = getTotalSends();
+
+    const emailMetrics = {
+      totalSends,
+      templates: emailStats.slice(0, 10),
+      avgOpenRate: emailStats.length > 0 ? emailStats.reduce((s, t) => s + t.openRate, 0) / emailStats.length : 0,
+      avgReplyRate: emailStats.length > 0 ? emailStats.reduce((s, t) => s + t.replyRate, 0) / emailStats.length : 0,
+    };
+
+    let socialMetrics = { totalPosts: 0 };
+    try {
+      const posts = JSON.parse(localStorage.getItem('salesedge:posts') || '[]');
+      socialMetrics.totalPosts = posts.filter(p => p.status === 'published').length;
+    } catch {}
+
+    const res = await fetch('/api/weekly-report', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ emailMetrics, socialMetrics, pipelineMetrics: {}, sequenceMetrics: {} }),
+    });
+
+    if (res.ok) {
+      const report = await res.json();
+      applyWeeklyReport(report);
+      localStorage.setItem(IMPROVEMENT_KEY, new Date().toISOString());
+
+      // Save report to reports store
+      try {
+        const reports = JSON.parse(localStorage.getItem('salesedge:reports') || '[]');
+        reports.unshift({ id: `report-${Date.now()}`, ...report, read: false, createdAt: new Date().toISOString() });
+        localStorage.setItem('salesedge:reports', JSON.stringify(reports));
+      } catch {}
+
+      return report;
+    }
+  } catch (err) {
+    console.error('Weekly improvement failed:', err);
+  }
+  return null;
+}
+
+export function detectWinningPatterns() {
+  // Track sends and check after every 5
+  try {
+    const perf = loadPerf();
+    const count = perf.sends.length;
+    const lastChecked = parseInt(localStorage.getItem(SEND_COUNTER_KEY) || '0');
+
+    if (count - lastChecked < 5) return null;
+
+    localStorage.setItem(SEND_COUNTER_KEY, String(count));
+
+    const stats = getAllTemplateStats().filter(t => t.sends >= 5);
+    if (stats.length < 2) return null;
+
+    stats.sort((a, b) => b.score - a.score);
+    const top = stats[0];
+    const second = stats[1];
+
+    if (top.score > second.score * 1.15 && top.score > 0) {
+      // New winner detected
+      const perf = loadPerf();
+      if (!perf.promoted) perf.promoted = [];
+      if (!perf.promoted.includes(top.templateId)) {
+        perf.promoted.push(top.templateId);
+        savePerf(perf);
+      }
+
+      return {
+        type: 'winning_pattern',
+        subject: top.subject,
+        score: top.score,
+        message: `New winning template detected: "${top.subject}" — score ${top.score.toFixed(1)}`,
+      };
+    }
+  } catch (err) {
+    console.error('Winning pattern detection failed:', err);
+  }
+  return null;
+}
+
+export function scheduleSequenceActions(leads) {
+  const scheduled = [];
+  const now = new Date();
+  const twoWeeks = new Date(now);
+  twoWeeks.setDate(twoWeeks.getDate() + 14);
+
+  for (const lead of leads) {
+    if (lead.stage === 'closed' || lead.stage === 'dead') continue;
+
+    const tier = lead.tier || 3;
+    const config = { 1: 'Aggressive', 2: 'Standard', 3: 'Nurture' };
+    const steps = (
+      tier === 1 ? [1, 3, 5, 7, 10, 14] :
+      tier === 2 ? [1, 5, 7, 14, 21] :
+      [1, 14, 30]
+    );
+
+    const history = lead.sequenceHistory || [];
+    const start = new Date(lead.sequenceStartedAt || lead.createdAt);
+
+    for (const day of steps) {
+      const completed = history.some(h => h.day === day);
+      if (completed) continue;
+
+      const dueDate = new Date(start);
+      dueDate.setDate(start.getDate() + day - 1);
+
+      if (dueDate <= twoWeeks) {
+        scheduled.push({
+          leadId: lead.id,
+          firmName: lead.firmName,
+          tier: lead.tier,
+          day,
+          dueDate: dueDate.toISOString(),
+        });
+      }
+    }
+  }
+
+  try {
+    localStorage.setItem('salesedge:scheduledActions', JSON.stringify(scheduled));
+  } catch {}
+
+  return scheduled;
+}
+
 export function calculateMetrics(leads) {
   const total = leads.length;
   const byTier = { 1: [], 2: [], 3: [] };
