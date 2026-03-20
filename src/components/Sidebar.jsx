@@ -2,17 +2,37 @@ import { NavLink } from 'react-router-dom';
 import { colors, font } from '../styles/tokens';
 import { getTotalSends } from '../engine/learning';
 
-const NAV_ITEMS = [
-  { path: '/', label: 'Pipeline', icon: '◈' },
-  { path: '/email-performance', label: 'Email Performance', icon: '◎', showBadge: true },
-  { path: '/morning', label: 'Morning Briefing', icon: '☀' },
-  { path: '/content', label: 'Content Calendar', icon: '▦' },
-  { path: '/inbox', label: 'Unified Inbox', icon: '✉' },
-  { path: '/reports', label: 'Weekly Report', icon: '◪' },
-];
-
-export default function Sidebar() {
+export default function Sidebar({ todayActionCount, scheduledPostCount, unreadInboxCount, hasUnreadReport, lastReportDate }) {
   const totalSends = getTotalSends();
+
+  const NAV_ITEMS = [
+    { path: '/', label: 'Pipeline', icon: '▤' },
+    {
+      path: '/email-performance', label: 'Email Performance', icon: '◎',
+      badge: totalSends > 0 ? totalSends : null,
+      badgeColor: colors.amber,
+    },
+    {
+      path: '/morning', label: 'Morning Briefing', icon: '◑',
+      badge: todayActionCount > 0 ? todayActionCount : null,
+      badgeColor: colors.amber,
+    },
+    {
+      path: '/content', label: 'Content Calendar', icon: '⊞',
+      badge: scheduledPostCount > 0 ? scheduledPostCount : null,
+      badgeColor: colors.blue,
+    },
+    {
+      path: '/inbox', label: 'Unified Inbox', icon: '◉',
+      badge: unreadInboxCount > 0 ? unreadInboxCount : null,
+      badgeColor: unreadInboxCount > 0 ? colors.red : colors.amber,
+    },
+    {
+      path: '/reports', label: 'Weekly Report', icon: '◈',
+      badge: hasUnreadReport ? 'NEW' : null,
+      badgeColor: colors.green,
+    },
+  ];
 
   return (
     <nav style={styles.sidebar}>
@@ -36,15 +56,26 @@ export default function Sidebar() {
           >
             <span style={styles.icon}>{item.icon}</span>
             {item.label}
-            {item.showBadge && totalSends > 0 && (
-              <span style={styles.badge}>{totalSends}</span>
+            {item.badge != null && (
+              <span style={{ ...styles.badge, background: item.badgeColor || colors.amber }}>
+                {item.badge}
+              </span>
             )}
           </NavLink>
         ))}
       </div>
       <div style={styles.footer}>
-        <div style={styles.footerLine}>Phase 2 — Active</div>
-        <div style={{ ...styles.footerLine, color: colors.textMuted }}>v0.2.0</div>
+        <div style={styles.footerLine}>Phase 3 — Active</div>
+        <div style={{ ...styles.footerLine, color: colors.textMuted }}>v0.3.0</div>
+        {scheduledPostCount > 0 && (
+          <div style={styles.footerStat}>Posts queued: {scheduledPostCount}</div>
+        )}
+        {unreadInboxCount > 0 && (
+          <div style={{ ...styles.footerStat, color: colors.red }}>Inbox unread: {unreadInboxCount}</div>
+        )}
+        {lastReportDate && (
+          <div style={styles.footerStat}>Last report: {lastReportDate}</div>
+        )}
       </div>
     </nav>
   );
@@ -109,7 +140,6 @@ const styles = {
   },
   badge: {
     marginLeft: 'auto',
-    background: colors.amber,
     color: colors.bg0,
     fontSize: 10,
     fontWeight: 700,
@@ -126,5 +156,11 @@ const styles = {
     fontSize: 10,
     color: colors.textSecondary,
     lineHeight: 1.6,
+  },
+  footerStat: {
+    fontSize: 10,
+    color: colors.textSecondary,
+    lineHeight: 1.6,
+    marginTop: 2,
   },
 };
